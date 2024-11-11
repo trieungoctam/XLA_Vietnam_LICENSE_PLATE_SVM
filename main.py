@@ -12,19 +12,18 @@ root.geometry("800x650")
 
 # Khai báo các hằng số
 GAUSSIAN_SMOOTH_FILTER_SIZE = (5, 5)
+
 ADAPTIVE_THRESH_BLOCK_SIZE = 19
 ADAPTIVE_THRESH_WEIGHT = 9
 
 Min_char = 0.01
 Max_char = 0.09
 
-# Đường dẫn đến mô hình SVM đã huấn luyện
-SVM_MODEL_PATH = "svm.xml"
-RESIZED_IMAGE_WIDTH = 30
-RESIZED_IMAGE_HEIGHT = 60
+KNN_MODEL_PATH = "knn_model.xml"
+RESIZED_IMAGE_WIDTH = 20
+RESIZED_IMAGE_HEIGHT = 30
 
-# Tải mô hình SVM
-svm_model = cv2.ml.SVM_load(SVM_MODEL_PATH)
+kNearest = cv2.ml.KNearest_load("knn_model.xml")
 
 # Danh sách trạng thái, tiêu đề và chỉ số hiện tại
 image_states = []
@@ -165,9 +164,6 @@ def process_image(image_path):
             roi = cv2.resize(roi, (0, 0), fx=3, fy=3)
             imgThresh = cv2.resize(imgThresh, (0, 0), fx=3, fy=3)
 
-            # cv2.imshow("imgThresh",imgThresh)
-            # cv2.imshow("roi",roi)
-
             ##################################
 
             #################### Prepocessing and Character segmentation ####################
@@ -208,22 +204,19 @@ def process_image(image_path):
                 imgROI = thre_mor[y:y + h, x:x + w]  # Crop the characters
 
                 imgROIResized = cv2.resize(imgROI, (RESIZED_IMAGE_WIDTH, RESIZED_IMAGE_HEIGHT))  # resize image
-                npaROIResized = imgROIResized.reshape(1, RESIZED_IMAGE_WIDTH * RESIZED_IMAGE_HEIGHT).astype(np.float32)
+                npaROIResized = imgROIResized.reshape(
+                    (1, RESIZED_IMAGE_WIDTH * RESIZED_IMAGE_HEIGHT))
+                # KNN
+                npaROIResized = np.float32(npaROIResized)
+                _, npaResults, neigh_resp, dists = kNearest.findNearest(npaROIResized, k=3)
+                strCurrentChar = str(chr(int(npaResults[0][0])))
 
-                _, npaResults = svm_model.predict(npaROIResized)
-                result = int(npaResults[0][0])
-                if result <= 9:  # Neu la so thi hien thi luon
-                    result = str(result)
-                else:  # Neu la chu thi chuyen bang ASCII
-                    result = chr(result)
+                cv2.putText(roi, strCurrentChar, (x, y + 50), cv2.FONT_HERSHEY_DUPLEX, 2, (255, 255, 0), 3)
 
-                cv2.putText(roi, result, (x, y + 50), cv2.FONT_HERSHEY_DUPLEX, 2, (255, 255, 0), 3)
-
-                # Phân loại ký tự theo hàng trên hoặc dưới
-                if y < height / 3:
-                    first_line += result
+                if (y < height / 3):  # decide 1 or 2-line license plate
+                    first_line = first_line + strCurrentChar
                 else:
-                    second_line += result
+                    second_line = second_line + strCurrentChar
 
             roi = cv2.resize(roi, None, fx=0.75, fy=0.75)
             image_states.append(roi)
